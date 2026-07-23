@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buddy</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b0d12;
+    --fg: #e8eaf0;
+    --dim: #8a90a2;
+    --accent: #5b8cff;
+    --accent-active: #ff5b7a;
+    --panel: #151822;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 2rem;
+  }
+  h1 { font-size: 1.1rem; font-weight: 600; color: var(--dim); margin: 0; letter-spacing: 0.02em; }
+  #talk {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 0 0 0 rgba(91, 140, 255, 0.5);
+    transition: transform 0.1s ease, box-shadow 0.2s ease, background 0.2s ease;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  #talk.recording {
+    background: var(--accent-active);
+    transform: scale(1.06);
+    box-shadow: 0 0 0 14px rgba(255, 91, 122, 0.15);
+  }
+  #status { color: var(--dim); font-size: 0.9rem; min-height: 1.2em; }
+  #log {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .entry { background: var(--panel); border-radius: 10px; padding: 0.7rem 1rem; font-size: 0.92rem; }
+  .entry .label { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem; }
+  .hint { color: var(--dim); font-size: 0.8rem; text-align: center; max-width: 420px; }
+</style>
+</head>
+<body>
+  <h1>BUDDY</h1>
+  <button id="talk">Hold to talk</button>
+  <div id="status">Press and hold the button, or hold Space, then speak.</div>
+  <div id="log"></div>
+  <div class="hint">Runs entirely on this machine. Audio never leaves localhost.</div>
+
+<script>
+const talkBtn = document.getElementById("talk");
+const statusEl = document.getElementById("status");
+const logEl = document.getElementById("log");
+
+const TARGET_SAMPLE_RATE = 16000;
+const MAX_RECORD_MS = 30000;
+
+let audioCtx = null;
+let mediaStream = null;
+let sourceNode = null;
+let processorNode = null;
+let silentGain = null;
+let chunks = [];
+let recording = false;
+let maxTimer = null;
+
+function setStatus(text) { statusEl.textContent = text; }
+
+function addEntry(label, text) {
+  if (!text) return;
+  const div = document.createElement("div");
+  div.className = "entry";
+  const l = document.createElement("div");
+  l.className = "label";
+  l.textContent = label;
+  const t = document.createElement("div");
+  t.textContent = text;
+  div.appendChild(l);
+  div.appendChild(t);
+  logEl.prepend(div);
+}
+
+function downsample(buffer, inputRate, outputRate) {
+  if (outputRate === inputRate) return buffer;
+  const ratio = inputRate / outputRate;
+  const newLength = Math.round(buffer.length / ratio);
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < newLength) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio);
+    let accum = 0, count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i];
+      count++;
+    }
+    result[offsetResult] = count ? accum / count : 0;
+    offsetResult++;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
+}
+
+function encodeWAV(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+
+  function writeString(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate
+  view.setUint16(32, 2, true); // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeString(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
+async function startRecording() {
+  if (recording) return;
+  recording = true;
+  talkBtn.classList.add("recording");
+  talkBtn.textContent = "Listening...";
+  setStatus("Listening...");
+  chunks = [];
+
+  try {
+    if (!mediaStream) {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+    processorNode = audioCtx.createScriptProcessor(4096, 1, 1);
+    silentGain = audioCtx.createGain();
+    silentGain.gain.value = 0;
+
+    processorNode.onaudioprocess = (e) => {
+      chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    };
+
+    sourceNode.connect(processorNode);
+    processorNode.connect(silentGain);
+    silentGain.connect(audioCtx.destination);
+
+    maxTimer = setTimeout(stopRecording, MAX_RECORD_MS);
+  } catch (err) {
+    recording = false;
+    talkBtn.classList.remove("recording");
+    talkBtn.textContent = "Hold to talk";
+    setStatus("Mic access denied: " + err.message);
+  }
+}
+
+async function stopRecording() {
+  if (!recording) return;
+  recording = false;
+  talkBtn.classList.remove("recording");
+  talkBtn.textContent = "Hold to talk";
+  clearTimeout(maxTimer);
+
+  const inputRate = audioCtx.sampleRate;
+  sourceNode.disconnect();
+  processorNode.disconnect();
+  silentGain.disconnect();
+  await audioCtx.close();
+
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const merged = new Float32Array(total);
+  let off = 0;
+  for (const c of chunks) { merged.set(c, off); off += c.length; }
+  chunks = [];
+
+  if (total === 0) {
+    setStatus("Didn't catch that -- press and hold, then speak.");
+    return;
+  }
+
+  setStatus("Thinking...");
+  const downsampled = downsample(merged, inputRate, TARGET_SAMPLE_RATE);
+  const wavBlob = encodeWAV(downsampled, TARGET_SAMPLE_RATE);
+  await sendUtterance(wavBlob);
+}
+
+async function sendUtterance(wavBlob) {
+  try {
+    const res = await fetch("/api/utterance", {
+      method: "POST",
+      headers: { "Content-Type": "audio/wav" },
+      body: wavBlob,
+    });
+    const data = await res.json();
+    addEntry("Heard", data.heard);
+    addEntry("Buddy", data.response);
+    if (data.response && "speechSynthesis" in window) {
+      const utter = new SpeechSynthesisUtterance(data.response);
+      speechSynthesis.speak(utter);
+    }
+    setStatus("Press and hold the button, or hold Space, then speak.");
+  } catch (err) {
+    setStatus("Request failed: " + err.message);
+  }
+}
+
+talkBtn.addEventListener("mousedown", startRecording);
+talkBtn.addEventListener("touchstart", (e) => { e.preventDefault(); startRecording(); });
+talkBtn.addEventListener("mouseup", stopRecording);
+talkBtn.addEventListener("mouseleave", () => { if (recording) stopRecording(); });
+talkBtn.addEventListener("touchend", (e) => { e.preventDefault(); stopRecording(); });
+
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && !e.repeat && document.activeElement !== talkBtn) {
+    e.preventDefault();
+    startRecording();
+  }
+});
+document.addEventListener("keyup", (e) => {
+  if (e.code === "Space") {
+    e.preventDefault();
+    stopRecording();
+  }
+});
+</script>
+</body>
+</html>

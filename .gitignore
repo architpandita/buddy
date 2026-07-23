@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+models/whisper/*.bin
+models/wakeword/*.onnx
+.DS_Store
+.idea/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

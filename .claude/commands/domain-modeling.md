@@ -1,0 +1,1 @@
+../../skills/development/domain-modeling/SKILL.md

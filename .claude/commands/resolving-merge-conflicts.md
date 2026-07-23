@@ -1,0 +1,1 @@
+../../skills/development/resolving-merge-conflicts/SKILL.md

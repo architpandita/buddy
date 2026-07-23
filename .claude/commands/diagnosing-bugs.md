@@ -1,0 +1,1 @@
+../../skills/development/diagnosing-bugs/SKILL.md

@@ -1,0 +1,1 @@
+../../skills/development/prototype/SKILL.md

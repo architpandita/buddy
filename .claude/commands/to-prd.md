@@ -1,0 +1,1 @@
+../../skills/development/to-prd/SKILL.md

@@ -1,0 +1,1 @@
+../../skills/development/grill-with-docs/SKILL.md

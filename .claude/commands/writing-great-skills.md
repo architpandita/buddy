@@ -1,0 +1,1 @@
+../../skills/productivity/writing-great-skills/SKILL.md

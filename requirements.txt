@@ -1,0 +1,8 @@
+claude-agent-sdk
+sounddevice
+numpy
+openwakeword
+pynput
+webrtcvad
+fastapi
+uvicorn[standard]

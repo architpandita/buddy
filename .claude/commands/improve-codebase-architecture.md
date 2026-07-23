@@ -1,0 +1,1 @@
+../../skills/development/improve-codebase-architecture/SKILL.md

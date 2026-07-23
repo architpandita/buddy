@@ -1,0 +1,1 @@
+../../skills/development/setup-matt-pocock-skills/SKILL.md
