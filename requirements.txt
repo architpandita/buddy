@@ -6,3 +6,7 @@ pynput
 webrtcvad
 fastapi
 uvicorn[standard]
+
+# --- dev / test ---
+pytest
+pytest-asyncio

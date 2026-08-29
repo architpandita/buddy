@@ -1,6 +1,6 @@
 # Voice Agent Plane — Build Plan
 
-**Status:** Final, pending Phase 0
+**Status:** Phases 0–5 complete (2026-08-30). Phase 0 findings: [`phase0-findings.md`](./phase0-findings.md); build order + progress: [`voice-assistant-tdd-plan.md`](./voice-assistant-tdd-plan.md). Next: Phase 6.
 **Target:** MacBook Air M1, 8 GB RAM, alongside an already-running local Whisper
 
 ---
@@ -214,13 +214,18 @@ Script auth: `claude setup-token` issues a long-lived token for a subscription a
 
 ## 8. Phases
 
-**Phase 0 — Validate.** Half a day, before any real code.
-- Confirm `claude -p`, `--resume`, `setup-token` work
-- Measure real round-trip latency
-- Find how many turns the allowance supports
-- Determine how Whisper emits text
+**Phase 0 — Validate.** ✅ Done 2026-08-29 — [`phase0-findings.md`](./phase0-findings.md).
+- `claude -p` / `--resume` / `stream-json` / `--model` / `--max-turns`: all work on Pro
+  OAuth (no `ANTHROPIC_API_KEY`). `setup-token` subcommand present.
+- Round-trip: ~8.5 s wall for a short Haiku turn **from a clean cwd**; ~23 s from the
+  repo dir (MCP/hook discovery) → daemon must run `claude -p` in a sandbox dir.
+- Allowance: not stress-tested (would lock out browser Claude); instrument `num_turns`
+  + conservative default daily cap, revisit after a week.
+- Whisper: no external process — it's `whisper-cli` per-utterance, in-process, via
+  `buddy/stt/whisper_transcriber.py`. Input adapter = in-process wrapper, not file/pipe.
 
 *Kill criteria: turn over 20 s, or 50 turns exhausts the allowance → change backend.*
+Neither tripped (latency PASS given clean-cwd requirement; allowance monitored).
 
 **Phase 1 — Text loop.** Typed input, engine adapter, session handling, speech shaper,
 `say` output. One agent. Proves the core.
@@ -231,7 +236,7 @@ Script auth: `claude setup-token` issues a long-lived token for a subscription a
 
 **Phase 4 — Router and agents.** The switchboard.
 
-**Phase 5 — Research mode.** Web search with durable briefs.
+**Phase 5 — Research mode.** ✅ Done 2026-08-30. Web search with durable briefs: `researcher` agent has `WebSearch/WebFetch/Write`, `buddy/research/brief.py` persists a dated append-only brief to `memory/research/<slug>.md`, switchboard speaks only the shaped summary and bounds the tool loop via `--max-turns`.
 
 **Deferred:** GPT/Gemini adapters, agent-to-agent delegation, Kokoro, wake word.
 

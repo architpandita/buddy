@@ -21,6 +21,53 @@ WHISPER_MODEL_PATH = BUDDY_ROOT / "models" / "whisper" / "ggml-base.en.bin"
 # --- TTS ---
 TTS_VOICE = None  # None = macOS default voice; e.g. "Samantha" to override
 
+# ==========================================================================
+# Voice Agent Plane (docs/voice-assistant-plan.md) — separate from Milestone 1
+# ==========================================================================
+
+# Every `claude -p` call runs with cwd here, NOT the repo dir: Phase 0 found the
+# repo dir adds ~15s of MCP/hook discovery per call, and an empty sandbox also
+# satisfies the plan §7 filesystem-access mitigation.
+VAP_SANDBOX_DIR = Path.home() / ".buddy" / "sandbox"
+
+# Agent spec markdown files (system prompt + frontmatter) live here.
+VAP_AGENTS_DIR = BUDDY_ROOT / "agents"
+
+# Per-agent persisted Claude session ids (short-term memory, plan §4.6).
+VAP_STATE_DIR = Path.home() / ".buddy" / "state"
+
+# Claude Code writes for a terminal; cap how much we ever speak in one turn.
+SPOKEN_TURN_MAX_SENTENCES = 4
+
+# Workhorse models on Pro (Opus is allowance-limited — never auto-selected).
+VAP_FAST_MODEL = "claude-haiku-4-5-20251001"
+VAP_SMART_MODEL = "claude-sonnet-5"
+
+# Long-term memory (plan §4.6): flat markdown, explicit writes only, never
+# auto-deleted. Keyword retrieval injects at most this many characters into a
+# turn (~200 tokens) — never the whole store.
+VAP_MEMORY_DIR = Path.home() / ".buddy" / "memory"
+VAP_MEMORY_RETRIEVAL_BUDGET_CHARS = 800
+
+# Spoken-turn transcripts, kept for the janitor to prune. 0 = keep nothing.
+VAP_TRANSCRIPT_DIR = Path.home() / ".buddy" / "transcripts"
+VAP_TRANSCRIPT_TTL_DAYS = 7
+
+# Router (plan §4.3): turns longer than this many words escalate a fast-model
+# agent to the smart model. Opus is never auto-selected — override only.
+VAP_LONG_TURN_WORDS = 40
+
+# Session rotation (plan §4.6): every N Claude turns per agent, summarise to a
+# card and start a fresh session so long transcripts stop being resent.
+VAP_ROTATE_EVERY_N_TURNS = 8
+VAP_ROTATION_CARD_MAX_CHARS = 900
+
+# Allowance control (plan §6.7): hard daily cap on Claude turns. On hit Buddy
+# says so and stops — no degraded fallback. Start conservative; raise once you
+# have observed real headroom (Phase 0 left this unmeasured).
+VAP_DAILY_TURN_CAP = 40
+VAP_ALLOWANCE_FILE = Path.home() / ".buddy" / "allowance.json"
+
 # --- Browser server (web_main.py) ---
 # Mic capture, push-to-talk, and TTS playback all happen in the browser tab;
 # this server only transcribes + routes. Keep it bound to localhost.
