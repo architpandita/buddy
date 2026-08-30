@@ -238,6 +238,8 @@ Neither tripped (latency PASS given clean-cwd requirement; allowance monitored).
 
 **Phase 5 — Research mode.** ✅ Done 2026-08-30. Web search with durable briefs: `researcher` agent has `WebSearch/WebFetch/Write`, `buddy/research/brief.py` persists a dated append-only brief to `memory/research/<slug>.md`, switchboard speaks only the shaped summary and bounds the tool loop via `--max-turns`.
 
+**Conversation mode.** ✅ Done 2026-08-31 ([spec](./superpowers/specs/2026-08-30-conversation-mode-design.md)). "start conversation" makes the voice loop auto-listen after each reply (8s onset window, 4s trailing silence); 3 silent windows or "end conversation" exits.
+
 **Deferred:** GPT/Gemini adapters, agent-to-agent delegation, Kokoro, wake word.
 
 ---

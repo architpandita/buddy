@@ -1,7 +1,7 @@
 # Conversation mode — design
 
 **Date:** 2026-08-30
-**Status:** approved for planning
+**Status:** implemented 2026-08-31 (16 tests, suite green at 143)
 
 ## Goal
 

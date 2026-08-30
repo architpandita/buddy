@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import threading
 
+from buddy import config
 from buddy.audio import capture
 from buddy.audio.hotkey import HotkeyListener
 from buddy.audio.wakeword import WakeWordListener
@@ -41,7 +42,22 @@ def main() -> None:
             if ww is not None:
                 ww.resume()
 
-    intake = MicIntake(record=record)
+    def follow_up_record(stop_event: threading.Event):
+        ww = wakeword_box.get("ww")
+        if ww is not None:
+            ww.pause()
+        try:
+            return capture.record_until_silence(
+                config.VAP_CONVERSATION_SILENCE_S,
+                capture.MAX_RECORD_SECONDS,
+                stop_event,
+                onset_timeout=config.VAP_CONVERSATION_ONSET_TIMEOUT_S,
+            )
+        finally:
+            if ww is not None:
+                ww.resume()
+
+    intake = MicIntake(record=record, follow_up_record=follow_up_record)
     hotkey = HotkeyListener(on_press=intake.trigger)
     wakeword = WakeWordListener(on_detected=intake.trigger)
     wakeword_box["ww"] = wakeword
@@ -50,7 +66,7 @@ def main() -> None:
     wakeword.start()
     print("[voice] Ready. Press the hotkey or say 'Hi Buddy'. Ctrl-C to quit.")
     try:
-        VoiceLoop(intake=intake, turn_runner=runner).run()
+        VoiceLoop(intake=intake, turn_runner=runner, state=runner.state).run()
     except KeyboardInterrupt:
         pass
     finally:

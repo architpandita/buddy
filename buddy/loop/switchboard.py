@@ -50,6 +50,10 @@ class Switchboard:
         self._preparse = preparser
         self._last_reply: str | None = None
 
+    @property
+    def state(self) -> VapState:
+        return self._state
+
     def run_turn(self, text: str) -> str:
         handled = self._preparse(
             text, memory=self._memory, state=self._state, last_reply=self._last_reply

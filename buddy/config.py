@@ -53,6 +53,15 @@ VAP_MEMORY_RETRIEVAL_BUDGET_CHARS = 800
 VAP_TRANSCRIPT_DIR = Path.home() / ".buddy" / "transcripts"
 VAP_TRANSCRIPT_TTL_DAYS = 7
 
+# Conversation mode (docs/superpowers/specs/2026-08-30-conversation-mode-design.md):
+# after "start conversation", the voice loop auto-listens once per reply. It waits
+# ONSET_TIMEOUT_S for the user to start talking, then ends their turn on
+# SILENCE_S of trailing quiet. MAX_IDLE_WINDOWS consecutive silent windows exit
+# the mode (first window + 2 retries).
+VAP_CONVERSATION_ONSET_TIMEOUT_S = 8.0
+VAP_CONVERSATION_SILENCE_S = 4.0
+VAP_CONVERSATION_MAX_IDLE_WINDOWS = 3
+
 # Router (plan §4.3): turns longer than this many words escalate a fast-model
 # agent to the smart model. Opus is never auto-selected — override only.
 VAP_LONG_TURN_WORDS = 40

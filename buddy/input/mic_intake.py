@@ -19,6 +19,7 @@ from typing import Callable, Iterator
 
 import numpy as np
 
+from buddy import config
 from buddy.audio import capture as _capture
 from buddy.stt import whisper_transcriber as _stt
 
@@ -34,13 +35,26 @@ def _default_record(stop_event: threading.Event) -> "np.ndarray":
     )
 
 
+def _default_follow_up_record(stop_event: threading.Event) -> "np.ndarray":
+    """Conversation-mode listen: give up if the user doesn't start talking within
+    the onset window, and end their turn on a longer trailing silence."""
+    return _capture.record_until_silence(
+        config.VAP_CONVERSATION_SILENCE_S,
+        _capture.MAX_RECORD_SECONDS,
+        stop_event,
+        onset_timeout=config.VAP_CONVERSATION_ONSET_TIMEOUT_S,
+    )
+
+
 class MicIntake:
     def __init__(
         self,
         record: Recorder | None = None,
         transcribe: Transcriber | None = None,
+        follow_up_record: Recorder | None = None,
     ):
         self._record = record or _default_record
+        self._follow_up_record = follow_up_record or _default_follow_up_record
         self._transcribe = transcribe or _stt.transcribe
         self._triggers: "queue.Queue[object]" = queue.Queue()
         self._recording = threading.Event()
@@ -64,19 +78,29 @@ class MicIntake:
             if item is _SENTINEL:
                 return
 
-            self._recording.set()
-            self._stop.clear()
-            try:
-                samples = self._record(self._stop)
-            finally:
-                self._recording.clear()
-
-            try:
-                text = self._transcribe(samples)
-            except Exception as exc:  # whisper-cli failure: skip, keep listening
-                print(f"[mic_intake] transcription failed: {exc}")
-                continue
-
-            text = (text or "").strip()
+            text = self._capture_and_transcribe(self._record)
             if text:
                 yield text
+
+    def follow_up(self) -> str | None:
+        """One-shot listen for a conversation-mode follow-up turn. Does not touch
+        the trigger queue. Returns the transcript, or None if the onset window
+        elapsed silently or transcription failed."""
+        return self._capture_and_transcribe(self._follow_up_record) or None
+
+    def _capture_and_transcribe(self, record: Recorder) -> str:
+        self._recording.set()
+        self._stop.clear()
+        try:
+            samples = record(self._stop)
+        finally:
+            self._recording.clear()
+
+        if samples is None or len(samples) == 0:
+            return ""
+        try:
+            text = self._transcribe(samples)
+        except Exception as exc:  # whisper-cli failure: skip, keep listening
+            print(f"[mic_intake] transcription failed: {exc}")
+            return ""
+        return (text or "").strip()

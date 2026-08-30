@@ -26,6 +26,8 @@ _SWITCH = re.compile(r"^(?:switch|change)(?: agent)?(?: to| into)?\s+(?:the\s+)?
 _BIG_MODEL = re.compile(r"\b(think harder|think hard|use the (?:big|smart|large) model)\b", re.I)
 _FAST_MODEL = re.compile(r"\b(think normally|use the (?:fast|small|quick) model)\b", re.I)
 _REPEAT = re.compile(r"^(?:repeat that|say that again|what did you say|come again)\b", re.I)
+_START_CONVO = re.compile(r"^(?:start|begin|enter|let'?s have)(?: a| the)? conversation\b", re.I)
+_END_CONVO = re.compile(r"^(?:end|stop|exit|leave)(?: the| this)? conversation\b", re.I)
 _STOP = re.compile(r"^(?:stop|cancel|never ?mind|forget it)\b", re.I)
 _WHAT_KNOW = re.compile(r"^what do you know about\s+(.*)", re.I)
 
@@ -50,6 +52,14 @@ def preparse(
     s = _clean(text)
     if not s:
         return None
+
+    if _END_CONVO.match(s):
+        state.conversation_mode = False
+        return "Okay, ending conversation."
+
+    if _START_CONVO.match(s):
+        state.conversation_mode = True
+        return "Okay, I'm listening."
 
     if _STOP.match(s):
         return ""

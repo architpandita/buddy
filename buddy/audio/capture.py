@@ -27,11 +27,18 @@ def record_until_silence(
     silence_duration: float = SILENCE_DURATION_S,
     max_seconds: float = MAX_RECORD_SECONDS,
     stop_event=None,
+    onset_timeout: float | None = None,
 ) -> np.ndarray:
     """Blocking call: records mic audio until silence (or `stop_event` is set).
 
     `stop_event` (threading.Event) lets a hotkey "press again to stop" cancel
     the silence-based endpointing early — used for push-to-talk mode.
+
+    `onset_timeout` (seconds): if set and no speech is heard within that window,
+    stop and return whatever was captured (usually empty). Used by conversation
+    mode's follow-up listen so a silent user drops the mic instead of holding it
+    open for `max_seconds`. Once speech is heard the onset cutoff no longer
+    applies — normal `silence_duration` endpointing takes over.
     """
     q: queue.Queue[np.ndarray] = queue.Queue()
 
@@ -41,6 +48,9 @@ def record_until_silence(
     blocks: list[np.ndarray] = []
     silence_blocks_needed = int(silence_duration * SAMPLE_RATE / BLOCK_SIZE)
     max_blocks = int(max_seconds * SAMPLE_RATE / BLOCK_SIZE)
+    onset_blocks = (
+        int(onset_timeout * SAMPLE_RATE / BLOCK_SIZE) if onset_timeout else None
+    )
     consecutive_silence = 0
     heard_speech = False
 
@@ -57,6 +67,12 @@ def record_until_silence(
             block = q.get()[:, 0]
             blocks.append(block)
             level = _rms(block)
+            if (
+                onset_blocks is not None
+                and not heard_speech
+                and len(blocks) >= onset_blocks
+            ):
+                break
             if level > SILENCE_RMS_THRESHOLD:
                 heard_speech = True
                 consecutive_silence = 0

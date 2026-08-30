@@ -13,3 +13,4 @@ from dataclasses import dataclass
 class VapState:
     active_agent: str | None = None      # None -> let the router decide
     model_override: str | None = None    # None -> let the router decide
+    conversation_mode: bool = False      # True -> voice loop auto-listens after each reply

@@ -68,3 +68,43 @@ def test_shutdown_ends_iteration():
     intake = MicIntake(record=lambda stop_event: SAMPLES, transcribe=lambda s: "hi")
     intake.shutdown()
     assert list(intake.utterances()) == []
+
+
+# -- conversation-mode follow-up ------------------------------------------------
+
+
+def test_follow_up_returns_transcript_on_speech():
+    intake = MicIntake(
+        follow_up_record=lambda stop_event: SAMPLES,
+        transcribe=lambda samples: "yes please",
+    )
+    assert intake.follow_up() == "yes please"
+
+
+def test_follow_up_returns_none_on_empty_samples():
+    intake = MicIntake(
+        follow_up_record=lambda stop_event: np.zeros(0, dtype=np.int16),
+        transcribe=lambda samples: "should not be called",
+    )
+    assert intake.follow_up() is None
+
+
+def test_follow_up_returns_none_on_transcription_failure():
+    def boom(samples):
+        raise RuntimeError("whisper exited 1")
+
+    intake = MicIntake(follow_up_record=lambda stop_event: SAMPLES, transcribe=boom)
+    assert intake.follow_up() is None
+
+
+def test_follow_up_does_not_consume_trigger_queue():
+    main_calls = []
+    intake = MicIntake(
+        record=lambda stop_event: main_calls.append(1) or SAMPLES,
+        follow_up_record=lambda stop_event: SAMPLES,
+        transcribe=lambda s: "hi",
+    )
+    intake.trigger()
+    intake.follow_up()
+    assert main_calls == []  # follow-up used its own recorder
+    assert intake._triggers.qsize() == 1  # the queued trigger is untouched

@@ -69,6 +69,32 @@ def test_repeat_that_replays_last_reply(state):
     assert out == "I said hello"
 
 
+def test_start_conversation_sets_mode(state):
+    for phrase in ("start conversation", "let's have a conversation", "begin conversation"):
+        state.conversation_mode = False
+        out = preparse(phrase, memory=FakeMemory(), state=state)
+        assert state.conversation_mode is True, phrase
+        assert out and out != ""
+
+
+def test_end_conversation_clears_mode(state):
+    state.conversation_mode = True
+    out = preparse("end conversation", memory=FakeMemory(), state=state)
+    assert state.conversation_mode is False
+    assert out and out != ""
+
+
+def test_stop_conversation_ends_mode_not_bare_stop(state):
+    state.conversation_mode = True
+    out = preparse("stop conversation", memory=FakeMemory(), state=state)
+    assert state.conversation_mode is False
+    assert out != ""  # spoken, not the silent bare-"stop" no-op
+
+
+def test_bare_stop_still_returns_empty(state):
+    assert preparse("stop", memory=FakeMemory(), state=state) == ""
+
+
 def test_stop_and_nevermind_are_silent_noops(state):
     for phrase in ("stop", "cancel", "never mind", "nevermind", "forget it"):
         assert preparse(phrase, memory=FakeMemory(), state=state) == ""
